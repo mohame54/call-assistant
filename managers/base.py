@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any, Union
+from typing import Dict, Optional, Any
 import asyncio
 import logging
 import json
 from fastapi import WebSocket
-
 
 
 class BaseConnectionManager(ABC):    
