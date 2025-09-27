@@ -2,10 +2,11 @@ import os
 import json
 import asyncio
 import logging
-from typing import Dict, Optional
+from typing import  Optional
 from fastapi import WebSocket, HTTPException
 from openai_voice import RealTimeOpenAiVoiceAssistantV2
 from audio_handlers.twilio_handler import TwilioAudioHandler
+from .base import BaseAudioConnectionManager
 from config import (
     AudioConfig,
     SessionConfig,
@@ -14,55 +15,57 @@ from config import (
 )
 from prompts import VOICE_AI_ASSISTANT
 
-logger = logging.getLogger(__name__)
 
-
-class TwilioConnectionManager:
-    
-    def __init__(self):
-        self.active_calls: Dict[str, dict] = {}
-        self.voice_assistants: Dict[str, RealTimeOpenAiVoiceAssistantV2] = {}
+class TwilioConnectionManager(BaseAudioConnectionManager):
+    def __init__(self, initial_message: Optional[str] = None):
+        super().__init__(initial_message)
+        self.logger = logging.getLogger(__name__)
         
     async def connect(self, websocket: WebSocket, call_sid: str):
         await websocket.accept()
-        self.active_calls[call_sid] = {
+        self.active_connections[call_sid] = {
             'websocket': websocket,
             'stream_sid': None,
             'connected_at': asyncio.get_event_loop().time()
         }
-        logger.info(f"📞 Twilio call {call_sid} connected")
+        self.logger.info(f"📞 Twilio call {call_sid} connected")
         
-    def disconnect(self, call_sid: str):
-        if call_sid in self.active_calls:
-            del self.active_calls[call_sid]
-
-        if call_sid in self.voice_assistants:
-            # Clean up voice assistant
-            asyncio.create_task(self.voice_assistants[call_sid].disconnect())
-            del self.voice_assistants[call_sid]
-        logger.info(f"📞 Twilio call {call_sid} disconnected")
+    async def disconnect(self, call_sid: str):
+        """Disconnect and cleanup a Twilio call session."""
+        await self.cleanup_session(call_sid)
+        self.logger.info(f"📞 Twilio call {call_sid} disconnected")
         
-    async def send_message(self, call_sid: str, message: dict):
+    async def send_message(self, session_id: str, message: dict) -> None:
         """Send message to Twilio call."""
-        if call_sid in self.active_calls:
-            websocket = self.active_calls[call_sid]['websocket']
+        if session_id in self.active_connections:
+            websocket = self.active_connections[session_id]['websocket']
             try:
                 await websocket.send_text(json.dumps(message))
             except Exception as e:
-                logger.error(f"Error sending message to Twilio call {call_sid}: {e}")
-                self.disconnect(call_sid)
+                self.logger.error(f"Error sending message to Twilio call {session_id}: {e}")
+                await self.disconnect(session_id)
     
-    async def handle_media_stream(self, websocket: WebSocket, call_sid: str):
+    async def create_audio_handler(self, websocket: WebSocket, session_id: str) -> TwilioAudioHandler:
+        """Create a Twilio audio handler for the session."""
+        return TwilioAudioHandler(websocket, session_id, self)
+    
+    async def create_voice_assistant(self, session_id: str, audio_handler: TwilioAudioHandler) -> RealTimeOpenAiVoiceAssistantV2:
+        """Create a voice assistant for the session."""
+        return await create_twilio_voice_assistant(
+            session_id,
+            manager=self,
+            audio_handler=audio_handler
+        )
+    
+    async def handle_message_stream(self, websocket: WebSocket, call_sid: str):
+        """Handle Twilio media stream - alias for compatibility."""
         try:
-            audio_handler = TwilioAudioHandler(websocket, call_sid, self)
+            # Create audio handler and store it
+            audio_handler = await self.create_audio_handler(websocket, call_sid)
+            self.audio_handlers[call_sid] = audio_handler
             
             # Create voice assistant for this call
-            assistant = await create_twilio_voice_assistant(
-                call_sid,
-                manager=self,
-                audio_handler=audio_handler
-            )
-            
+            assistant = await self.create_voice_assistant(call_sid, audio_handler)
             self.voice_assistants[call_sid] = assistant
             
     
@@ -73,38 +76,36 @@ class TwilioConnectionManager:
                     data = json.loads(message)
                     event_type = data.get('event')
                     
-                    logger.debug(f"📥 Twilio event: {event_type}")
+                    self.logger.debug(f"📥 Twilio event: {event_type}")
                     
+                    # Use audio handler's centralized event processing
+                    await audio_handler.handle_twilio_event(data)
+                    
+                    # Handle manager-specific logic for 'start' event
                     if event_type == 'start':
                         stream_sid = data.get('start', {}).get('streamSid')
-                        self.active_calls[call_sid]['stream_sid'] = stream_sid
-                        audio_handler.stream_sid = stream_sid  # Set stream_sid in audio handler
-                        logger.info(f"📞 Twilio stream started: {stream_sid}")
-                        
-                        initial_message = "Hello! I am an AI voice assistant powered by Twilio and OpenAI. How can I help you today?"
+                        self.active_connections[call_sid]['stream_sid'] = stream_sid
+                        initial_message = self.initial_message
+                        if not initial_message:
+                            initial_message = "Hello! I am an AI voice assistant powered by Twilio and OpenAI. How can I help you today?"
                         asyncio.create_task(assistant.start_conversation(initial_message))
-                        logger.info(f"🚀 Started conversation for call {call_sid}")
-                        
-                    elif event_type == 'media':
-                        media_data = data.get('media', {})
-                        if media_data.get('payload'):
-                            audio_handler.latest_media_timestamp = int(media_data.get('timestamp', 0))
-                            await audio_handler.add_input_audio(media_data['payload'])
-                            
-                    elif event_type == 'mark':
-                        if audio_handler.mark_queue:
-                            audio_handler.mark_queue.pop(0)
+                        self.logger.info(f"🚀 Started conversation for call {call_sid}")
                             
                 except json.JSONDecodeError:
-                    logger.error("Invalid JSON received from Twilio")
+                    self.logger.error("Invalid JSON received from Twilio")
                     continue
                 except Exception as e:
-                    logger.error(f"Error handling Twilio event: {e}")
+                    self.logger.error(f"Error handling Twilio event: {e}")
                     continue
                     
         except Exception as e:
-            logger.error(f"Error in Twilio media stream handler: {e}")
-            self.disconnect(call_sid)
+            self.logger.error(f"Error in Twilio media stream handler: {e}")
+            await self.disconnect(call_sid)
+    
+    # Compatibility method for existing code
+    async def handle_media_stream(self, websocket: WebSocket, call_sid: str):
+        """Compatibility wrapper for handle_message_stream."""
+        await self.handle_message_stream(websocket, call_sid)
 
 
 async def create_twilio_voice_assistant(

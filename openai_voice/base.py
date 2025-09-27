@@ -19,15 +19,18 @@ class StateManager(ABC):
         self.state = VoiceAssistantState.DISCONNECTED
         self.on_state_change: Optional[Callable] = None
     
-    @abstractmethod
     def set_state(self, new_state: VoiceAssistantState) -> None:
         """Set the assistant state and trigger callbacks."""
-        pass
+        old_state = self.state
+        self.state = new_state
+        
+        if self.on_state_change and old_state != new_state:
+            import asyncio
+            asyncio.create_task(self.on_state_change(old_state, new_state))
     
-    @abstractmethod
     def get_state(self) -> VoiceAssistantState:
         """Get the current assistant state."""
-        pass
+        return self.state
 
 
 class BaseVoiceAssistant(StateManager):
@@ -37,8 +40,7 @@ class BaseVoiceAssistant(StateManager):
         self.api_key = api_key
         self.session_id = session_id
         
-        # Event callbacks
-        self.on_state_change: Optional[Callable] = None
+        # Event callbacks (extending StateManager's on_state_change)
         self.on_speech_started: Optional[Callable] = None
         self.on_speech_ended: Optional[Callable] = None
         self.on_response_started: Optional[Callable] = None
@@ -70,18 +72,35 @@ class BaseVoiceAssistant(StateManager):
         """Interrupt the current response."""
         pass
     
-    def set_state(self, new_state: VoiceAssistantState) -> None:
-        """Set the assistant state and trigger callback."""
-        old_state = self.state
-        self.state = new_state
-        
-        if self.on_state_change and old_state != new_state:
-            import asyncio
-            asyncio.create_task(self.on_state_change(old_state, new_state))
+    async def start_conversation(self, initial_message: Optional[str] = None) -> None:
+        """Start a conversation with an optional initial message."""
+        if initial_message:
+            await self.send_text_message(initial_message)
     
-    def get_state(self) -> VoiceAssistantState:
-        """Get the current assistant state."""
-        return self.state
+    async def trigger_speech_started(self) -> None:
+        """Trigger speech started event callback."""
+        if self.on_speech_started:
+            await self.on_speech_started()
+    
+    async def trigger_speech_ended(self) -> None:
+        """Trigger speech ended event callback."""
+        if self.on_speech_ended:
+            await self.on_speech_ended()
+    
+    async def trigger_response_started(self) -> None:
+        """Trigger response started event callback."""
+        if self.on_response_started:
+            await self.on_response_started()
+    
+    async def trigger_response_ended(self) -> None:
+        """Trigger response ended event callback."""
+        if self.on_response_ended:
+            await self.on_response_ended()
+    
+    async def trigger_error(self, error_message: str) -> None:
+        """Trigger error event callback."""
+        if self.on_error:
+            await self.on_error(error_message)
 
 
 class ToolManager(ABC):

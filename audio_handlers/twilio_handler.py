@@ -15,24 +15,17 @@ def encode_audio(audio_data:bytes):
 
 class TwilioAudioHandler(AudioHandler):    
     def __init__(self, websocket, session_id: str, connection_manager):
-        self.websocket = websocket
-        self.session_id = session_id
-        self.connection_manager = connection_manager
+        # Set environment variable for Twilio-specific queue size before calling super
+        if "TWILIO_AUDIO_QUEUE_SIZE" in os.environ:
+            os.environ["AUDIO_QUEUE_SIZE"] = os.environ["TWILIO_AUDIO_QUEUE_SIZE"]
         
-        size = int(os.environ.get("TWILIO_AUDIO_QUEUE_SIZE", "100"))
-        self.input_queue = asyncio.Queue(maxsize=size)
-        self.output_queue = asyncio.Queue(maxsize=size)
+        super().__init__(session_id, connection_manager)
+        
+        self.websocket = websocket
         
         # Twilio-specific state
         self.stream_sid: Optional[str] = None
-        self.latest_media_timestamp: int = 0
         self.mark_queue: list = []
-        self.response_start_timestamp: Optional[float] = None
-        self.last_assistant_item: Optional[str] = None
-        
-        # Audio processing state
-        self.is_processing = False
-        self._output_task = None
         
         # Start output processing task
         self._start_output_processing()
@@ -128,25 +121,25 @@ class TwilioAudioHandler(AudioHandler):
             return None
     
     async def add_input_audio(self, audio_data: str) -> None:
-         try:
-             if not audio_data:
-                 logger.warning(f"Empty audio data received for Twilio session {self.session_id}")
-                 return
-             
-             try:
-                 mulaw_bytes = base64.b64decode(audio_data)
-                 if not self.input_queue.full():
-                     await self.input_queue.put(mulaw_bytes)
-                     logger.debug(f"✅ Added {len(mulaw_bytes)} bytes of µ-law audio to queue for Twilio session {self.session_id}")
-                 else:
-                     logger.warning(f"Input audio queue full for Twilio session {self.session_id}, dropping {len(mulaw_bytes)} bytes")
-                     
-             except Exception as decode_error:
-                 logger.error(f"Failed to decode base64 audio for Twilio session {self.session_id}: {decode_error}")
-                 return
-                 
-         except Exception as e:
-             logger.error(f"Error adding input audio for Twilio session {self.session_id}: {e}")
+        try:
+            if not audio_data:
+                logger.warning(f"Empty audio data received for Twilio session {self.session_id}")
+                return
+            
+            try:
+                mulaw_bytes = base64.b64decode(audio_data)
+                if not self.input_queue.full():
+                    await self.input_queue.put(mulaw_bytes)
+                    logger.debug(f"✅ Added {len(mulaw_bytes)} bytes of µ-law audio to queue for Twilio session {self.session_id}")
+                else:
+                    logger.warning(f"Input audio queue full for Twilio session {self.session_id}, dropping {len(mulaw_bytes)} bytes")
+                    
+            except Exception as decode_error:
+                logger.error(f"Failed to decode base64 audio for Twilio session {self.session_id}: {decode_error}")
+                return
+                
+        except Exception as e:
+            logger.error(f"Error adding input audio for Twilio session {self.session_id}: {e}")
     
     async def handle_twilio_event(self, event_data: Dict[str, Any]) -> None:
         event_type = event_data.get('event')
@@ -171,15 +164,13 @@ class TwilioAudioHandler(AudioHandler):
             logger.debug(f"📌 Received mark event from Twilio")
     
     async def handle_speech_started(self) -> None:
-        """Handle speech started event for interruption."""
+        """Twilio-specific speech started handler with buffer clearing."""
+        # Call parent method for common logic
+        await super().handle_speech_started()
+        
         logger.info("🎤 Speech started detected in Twilio call")
         
-        if self.last_assistant_item and self.response_start_timestamp:
-            # Calculate elapsed time for truncation
-            elapsed_time = self.latest_media_timestamp - self.response_start_timestamp
-            
-            logger.info(f"⏹️ Interrupting Twilio response: {elapsed_time}ms elapsed")
-            
+        if self.stream_sid:
             # Clear Twilio audio buffer
             await self.websocket.send_json({
                 "event": "clear",
@@ -188,17 +179,11 @@ class TwilioAudioHandler(AudioHandler):
             
             # Clear mark queue
             self.mark_queue.clear()
-            self.last_assistant_item = None
-            self.response_start_timestamp = None
+            logger.info("⏹️ Cleared Twilio audio buffer and mark queue")
     
-    def set_response_timing(self, item_id: str, start_timestamp: float) -> None:
-        """Set timing information for response interruption."""
-        self.last_assistant_item = item_id
-        self.response_start_timestamp = start_timestamp
-        logger.debug(f"📊 Set response timing: item_id={item_id}, timestamp={start_timestamp}")
     
     async def clear_audio_buffer(self) -> None:
-        """Clear audio buffers."""
+        """Twilio-specific buffer clearing including mark queue."""
         try:
             # Clear input queue
             while not self.input_queue.empty():
@@ -213,44 +198,26 @@ class TwilioAudioHandler(AudioHandler):
                     self.output_queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
+            
+            # Clear Twilio-specific mark queue
+            self.mark_queue.clear()
                     
             logger.info(f"Cleared audio buffers for Twilio session {self.session_id}")
             
         except Exception as e:
             logger.error(f"Error clearing audio buffers for Twilio session {self.session_id}: {e}")
     
-    async def get_output_audio(self) -> Optional[bytes]:
-        """Get output audio data."""
-        try:
-            return await asyncio.wait_for(self.output_queue.get(), timeout=0.1)
-        except asyncio.TimeoutError:
-            return None
-        except Exception as e:
-            logger.error(f"Error getting output audio for Twilio session {self.session_id}: {e}")
-            return None
-    
     async def shutdown(self):
+        """Twilio-specific shutdown with output task cleanup."""
         try:
             # Signal output processing task to stop
             if not self.output_queue.full():
                 await self.output_queue.put(None)
             
-            # Cancel output processing task
-            if self._output_task and not self._output_task.done():
-                self._output_task.cancel()
-                try:
-                    await self._output_task
-                except asyncio.CancelledError:
-                    pass
-            
-            # Clear buffers
-            await self.clear_audio_buffer()
+            # Call parent shutdown method
+            await super().shutdown()
             
             logger.info(f"Twilio audio handler shutdown for session {self.session_id}")
             
         except Exception as e:
             logger.error(f"Error during Twilio audio handler shutdown for session {self.session_id}: {e}")
-    
-    def __del__(self):
-        if self._output_task and not self._output_task.done():
-            self._output_task.cancel()

@@ -107,8 +107,6 @@ async def handle_media_stream(websocket: WebSocket):
     logger.info("📞 Twilio Media Stream WebSocket connected")
     
     try:
-        await websocket.accept()
-        
         call_sid = f"call_{int(asyncio.get_event_loop().time() * 1000)}"
         
         twilio_manager: TwilioConnectionManager = websocket.app.state.twilio_manager
