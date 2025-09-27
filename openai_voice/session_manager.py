@@ -5,7 +5,6 @@ from typing import Dict, Any, Optional
 from .base import EventHandler
 from config import SessionConfig
 
-logger = logging.getLogger(__name__)
 
 
 class SessionManager(EventHandler):
@@ -16,6 +15,7 @@ class SessionManager(EventHandler):
         self.session_created = False
         
         # Event callbacks
+        self.logger = logging.getLogger(__name__)
         self.on_session_created: Optional[callable] = None
         self.on_session_error: Optional[callable] = None
     
@@ -61,26 +61,26 @@ class SessionManager(EventHandler):
             }
         }
         
-        logger.info(f"Initializing session with config: {json.dumps(session_update, indent=2)}")
+        self.logger.info(f"Initializing session with config: {json.dumps(session_update, indent=2)}")
         await websocket.send(json.dumps(session_update))
-        logger.info("Session initialization message sent")
+        self.logger.info("Session initialization message sent")
         
         # Wait for session.created response
         await self._wait_for_session_created(websocket)
     
     async def _wait_for_session_created(self, websocket) -> None:
         """Wait for session.created response from OpenAI."""
-        logger.info("⏳ Waiting for session.created response...")
+        self.logger.info("⏳ Waiting for session.created response...")
         
         for i in range(self.session_config.session_creation_timeout_secs):
             try:
                 response = await asyncio.wait_for(websocket.recv(), timeout=1.0)
                 data = json.loads(response)
                 response_type = data.get('type', 'unknown')
-                logger.info(f"📥 Session init response: {response_type}")
+                self.logger.info(f"📥 Session init response: {response_type}")
                 
                 if response_type == "session.created":
-                    logger.info("✅ Session created successfully!")
+                    self.logger.info("✅ Session created successfully!")
                     self.session_created = True
                     if self.on_session_created:
                         await self.on_session_created()
@@ -91,14 +91,14 @@ class SessionManager(EventHandler):
                     return
                     
             except asyncio.TimeoutError:
-                logger.info(f"⏳ Still waiting for session.created... ({i+1}/{self.session_config.session_creation_timeout_secs})")
+                self.logger.info(f"⏳ Still waiting for session.created... ({i+1}/{self.session_config.session_creation_timeout_secs})")
             except json.JSONDecodeError as e:
-                logger.error(f"❌ Failed to parse session response: {e}")
+                self.logger.error(f"❌ Failed to parse session response: {e}")
                 continue
         
         if not self.session_created:
             error_msg = "Timeout waiting for session.created"
-            logger.error(f"❌ {error_msg}")
+            self.logger.error(f"❌ {error_msg}")
             if self.on_session_error:
                 await self.on_session_error(error_msg)
             raise RuntimeError(error_msg)
@@ -108,15 +108,15 @@ class SessionManager(EventHandler):
         error_details = data.get('error', {})
         error_msg = error_details.get('message', 'Unknown error')
         error_code = error_details.get('code', 'unknown')
-        logger.error(f"❌ OpenAI Session Error: {error_msg} (code: {error_code})")
+        self.logger.error(f"❌ OpenAI Session Error: {error_msg} (code: {error_code})")
         
         # Provide helpful error context
         if "403" in str(error_code) or "unauthorized" in error_msg.lower():
-            logger.error("💡 This usually means:")
+            self.logger.error("💡 This usually means:")
         elif "401" in str(error_code):
-            logger.error("💡 Authentication failed - check your API key")
+            self.logger.error("💡 Authentication failed - check your API key")
         elif "429" in str(error_code):
-            logger.error("💡 Rate limited - try again in a moment")
+            self.logger.error("💡 Rate limited - try again in a moment")
         
         if self.on_session_error:
             await self.on_session_error(error_msg)
@@ -139,7 +139,7 @@ class SessionManager(EventHandler):
         
         await websocket.send(json.dumps(conversation_item))
         await websocket.send(json.dumps({"type": "response.create"}))
-        logger.info(f"📤 Sent initial message: '{message[:50]}...'")
+        self.logger.info(f"📤 Sent initial message: '{message[:50]}...'")
     
     def is_session_ready(self) -> bool:
         """Check if the session is ready for use."""
@@ -148,13 +148,13 @@ class SessionManager(EventHandler):
     async def handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Handle session-related events."""
         if event_type == "session.created":
-            logger.info("✅ OpenAI session successfully created")
+            self.logger.info("✅ OpenAI session successfully created")
             self.session_created = True
             if self.on_session_created:
                 await self.on_session_created()
         
         elif event_type == "session.updated":
-            logger.info("✅ OpenAI session configuration updated")
+            self.logger.info("✅ OpenAI session configuration updated")
         
         elif event_type == "error" and not self.session_created:
             await self._handle_session_error(data)

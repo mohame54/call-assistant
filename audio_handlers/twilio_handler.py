@@ -5,8 +5,6 @@ import logging
 from typing import Optional, Dict, Any
 from .base import AudioHandler
 
-logger = logging.getLogger(__name__)
-
 
 def encode_audio(audio_data:bytes):
     audio_payload = base64.b64encode(audio_data).decode('utf-8')
@@ -22,6 +20,7 @@ class TwilioAudioHandler(AudioHandler):
         super().__init__(session_id, connection_manager)
         
         self.websocket = websocket
+        self.logger = logging.getLogger(__name__)
         
         # Twilio-specific state
         self.stream_sid: Optional[str] = None
@@ -64,7 +63,7 @@ class TwilioAudioHandler(AudioHandler):
                         }
                         
                         await self.websocket.send_json(audio_delta)
-                        logger.debug(f"🔊 Sent audio to Twilio: {len(audio_data)} bytes -> {len(audio_payload)} base64 chars")
+                        self.logger.debug(f"🔊 Sent audio to Twilio: {len(audio_data)} bytes -> {len(audio_payload)} base64 chars")
                         
                         # Send mark for synchronization
                         await self._send_mark()
@@ -73,11 +72,11 @@ class TwilioAudioHandler(AudioHandler):
                     # No audio data available, continue
                     continue
                 except Exception as e:
-                    logger.error(f"Error processing output audio for Twilio session {self.session_id}: {e}")
+                    self.logger.error(f"Error processing output audio for Twilio session {self.session_id}: {e}")
                     break
                     
         except Exception as e:
-            logger.error(f"Output audio processing failed for Twilio session {self.session_id}: {e}")
+            self.logger.error(f"Output audio processing failed for Twilio session {self.session_id}: {e}")
     
     async def _send_mark(self):
         if self.stream_sid:
@@ -88,23 +87,23 @@ class TwilioAudioHandler(AudioHandler):
             }
             await self.websocket.send_json(mark_event)
             self.mark_queue.append('responsePart')
-            logger.debug(f"📌 Sent mark event to Twilio")
+            self.logger.debug(f"📌 Sent mark event to Twilio")
     
     async def send_audio(self, audio_data: bytes) -> None:
         try:
             if not audio_data:
                 return
                 
-            logger.debug(f"🔊 Received audio for Twilio session {self.session_id}: {len(audio_data)} bytes")
+            self.logger.debug(f"🔊 Received audio for Twilio session {self.session_id}: {len(audio_data)} bytes")
                 
             # Add to output queue for processing
             if not self.output_queue.full():
                 await self.output_queue.put(audio_data)
             else:
-                logger.warning(f"Output audio queue full for Twilio session {self.session_id}, dropping audio")
+                self.logger.warning(f"Output audio queue full for Twilio session {self.session_id}, dropping audio")
                 
         except Exception as e:
-            logger.error(f"Error sending audio for Twilio session {self.session_id}: {e}")
+            self.logger.error(f"Error sending audio for Twilio session {self.session_id}: {e}")
     
     async def receive_audio(self) -> Optional[bytes]:
         try:
@@ -117,29 +116,29 @@ class TwilioAudioHandler(AudioHandler):
         except asyncio.TimeoutError:
             return None
         except Exception as e:
-            logger.error(f"Error receiving audio for Twilio session {self.session_id}: {e}")
+            self.logger.error(f"Error receiving audio for Twilio session {self.session_id}: {e}")
             return None
     
     async def add_input_audio(self, audio_data: str) -> None:
         try:
             if not audio_data:
-                logger.warning(f"Empty audio data received for Twilio session {self.session_id}")
+                self.logger.warning(f"Empty audio data received for Twilio session {self.session_id}")
                 return
             
             try:
                 mulaw_bytes = base64.b64decode(audio_data)
                 if not self.input_queue.full():
                     await self.input_queue.put(mulaw_bytes)
-                    logger.debug(f"✅ Added {len(mulaw_bytes)} bytes of µ-law audio to queue for Twilio session {self.session_id}")
+                    self.logger.debug(f"✅ Added {len(mulaw_bytes)} bytes of µ-law audio to queue for Twilio session {self.session_id}")
                 else:
-                    logger.warning(f"Input audio queue full for Twilio session {self.session_id}, dropping {len(mulaw_bytes)} bytes")
+                    self.logger.warning(f"Input audio queue full for Twilio session {self.session_id}, dropping {len(mulaw_bytes)} bytes")
                     
             except Exception as decode_error:
-                logger.error(f"Failed to decode base64 audio for Twilio session {self.session_id}: {decode_error}")
+                self.logger.error(f"Failed to decode base64 audio for Twilio session {self.session_id}: {decode_error}")
                 return
                 
         except Exception as e:
-            logger.error(f"Error adding input audio for Twilio session {self.session_id}: {e}")
+            self.logger.error(f"Error adding input audio for Twilio session {self.session_id}: {e}")
     
     async def handle_twilio_event(self, event_data: Dict[str, Any]) -> None:
         event_type = event_data.get('event')
@@ -149,7 +148,7 @@ class TwilioAudioHandler(AudioHandler):
             self.latest_media_timestamp = 0
             self.last_assistant_item = None
             self.response_start_timestamp = None
-            logger.info(f"📞 Twilio stream started: {self.stream_sid}")
+            self.logger.info(f"📞 Twilio stream started: {self.stream_sid}")
             
         elif event_type == 'media':
             media_data = event_data.get('media', {})
@@ -161,14 +160,14 @@ class TwilioAudioHandler(AudioHandler):
             # Handle mark events for synchronization
             if self.mark_queue:
                 self.mark_queue.pop(0)
-            logger.debug(f"📌 Received mark event from Twilio")
+            self.logger.debug(f"📌 Received mark event from Twilio")
     
     async def handle_speech_started(self) -> None:
         """Twilio-specific speech started handler with buffer clearing."""
         # Call parent method for common logic
         await super().handle_speech_started()
         
-        logger.info("🎤 Speech started detected in Twilio call")
+        self.logger.info("🎤 Speech started detected in Twilio call")
         
         if self.stream_sid:
             # Clear Twilio audio buffer
@@ -179,7 +178,7 @@ class TwilioAudioHandler(AudioHandler):
             
             # Clear mark queue
             self.mark_queue.clear()
-            logger.info("⏹️ Cleared Twilio audio buffer and mark queue")
+            self.logger.info("⏹️ Cleared Twilio audio buffer and mark queue")
     
     
     async def clear_audio_buffer(self) -> None:
@@ -202,10 +201,10 @@ class TwilioAudioHandler(AudioHandler):
             # Clear Twilio-specific mark queue
             self.mark_queue.clear()
                     
-            logger.info(f"Cleared audio buffers for Twilio session {self.session_id}")
+            self.logger.info(f"Cleared audio buffers for Twilio session {self.session_id}")
             
         except Exception as e:
-            logger.error(f"Error clearing audio buffers for Twilio session {self.session_id}: {e}")
+            self.logger.error(f"Error clearing audio buffers for Twilio session {self.session_id}: {e}")
     
     async def shutdown(self):
         """Twilio-specific shutdown with output task cleanup."""
@@ -217,7 +216,7 @@ class TwilioAudioHandler(AudioHandler):
             # Call parent shutdown method
             await super().shutdown()
             
-            logger.info(f"Twilio audio handler shutdown for session {self.session_id}")
+            self.logger.info(f"Twilio audio handler shutdown for session {self.session_id}")
             
         except Exception as e:
-            logger.error(f"Error during Twilio audio handler shutdown for session {self.session_id}: {e}")
+            self.logger.error(f"Error during Twilio audio handler shutdown for session {self.session_id}: {e}")

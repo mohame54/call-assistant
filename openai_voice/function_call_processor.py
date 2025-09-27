@@ -5,7 +5,6 @@ import logging
 from typing import Dict, Any, Optional, Set
 from .base import EventHandler, ToolManager
 
-logger = logging.getLogger(__name__)
 
 
 class FunctionCallProcessor(EventHandler, ToolManager):
@@ -20,6 +19,8 @@ class FunctionCallProcessor(EventHandler, ToolManager):
         
         # Tool execution tracking
         self.active_tool_tasks: Set[asyncio.Task] = set()
+        self.logger = logging.getLogger(__name__)
+
         
         # Event callbacks
         self.on_tool_result: Optional[callable] = None
@@ -29,13 +30,13 @@ class FunctionCallProcessor(EventHandler, ToolManager):
     def add_tool(self, tool) -> None:
         """Add a tool to the processor."""
         self.tools[tool.name] = tool
-        logger.info(f"Added tool: {tool.name}")
+        self.logger.info(f"Added tool: {tool.name}")
     
     def remove_tool(self, tool_name: str) -> None:
         """Remove a tool from the processor."""
         if tool_name in self.tools:
             del self.tools[tool_name]
-            logger.info(f"Removed tool: {tool_name}")
+            self.logger.info(f"Removed tool: {tool_name}")
     
     async def handle_function_call_delta(self, response: Dict[str, Any]) -> None:
         """Handle streaming function call argument deltas."""
@@ -43,7 +44,7 @@ class FunctionCallProcessor(EventHandler, ToolManager):
         delta = response.get('delta', '')
         
         if not call_id:
-            logger.warning("⚠️ Function call delta without call_id")
+            self.logger.warning("⚠️ Function call delta without call_id")
             return
         
         # Initialize or update function call accumulation
@@ -57,7 +58,7 @@ class FunctionCallProcessor(EventHandler, ToolManager):
         # Accumulate the delta
         self.pending_function_calls[call_id]['arguments'] += delta
         
-        logger.debug(f"🔧 Accumulating function call args for {call_id}: +{len(delta)} chars (total: {len(self.pending_function_calls[call_id]['arguments'])})")
+        self.logger.debug(f"🔧 Accumulating function call args for {call_id}: +{len(delta)} chars (total: {len(self.pending_function_calls[call_id]['arguments'])})")
         
         # Store function name if available
         if 'name' in response:
@@ -75,14 +76,14 @@ class FunctionCallProcessor(EventHandler, ToolManager):
             if not function_name:
                 function_name = accumulated_data['name']
             del self.pending_function_calls[call_id]
-            logger.info(f"🔧 Using accumulated arguments for {function_name}: {len(arguments_str)} chars")
+            self.logger.info(f"🔧 Using accumulated arguments for {function_name}: {len(arguments_str)} chars")
         else:
             # Fallback to response arguments
             arguments_str = response.get('arguments', '{}')
-            logger.warning(f"⚠️ No accumulated arguments found for call {call_id}")
+            self.logger.warning(f"⚠️ No accumulated arguments found for call {call_id}")
         
         if function_name not in self.tools:
-            logger.error(f"❌ Unknown function: {function_name}")
+            self.logger.error(f"❌ Unknown function: {function_name}")
             if self.on_tool_error:
                 await self.on_tool_error(call_id, f"Unknown function: {function_name}")
             return
@@ -92,11 +93,11 @@ class FunctionCallProcessor(EventHandler, ToolManager):
             await self.execute_tool(function_name, arguments, call_id)
             
         except json.JSONDecodeError as e:
-            logger.error(f"❌ Invalid JSON in function arguments: {e}")
+            self.logger.error(f"❌ Invalid JSON in function arguments: {e}")
             if self.on_tool_error:
                 await self.on_tool_error(call_id, f"Invalid JSON: {e}")
         except Exception as e:
-            logger.error(f"❌ Function call processing error: {e}")
+            self.logger.error(f"❌ Function call processing error: {e}")
             if self.on_tool_error:
                 await self.on_tool_error(call_id, str(e))
     
@@ -106,7 +107,7 @@ class FunctionCallProcessor(EventHandler, ToolManager):
             raise ValueError(f"Tool '{tool_name}' not found")
         
         tool = self.tools[tool_name]
-        logger.info(f"🔧 Function call completed: {tool_name} with args: {arguments}")
+        self.logger.info(f"🔧 Function call completed: {tool_name} with args: {arguments}")
         
         if self.non_blocking_tools_calling:
             # Send immediate acknowledgment to OpenAI
@@ -136,7 +137,7 @@ class FunctionCallProcessor(EventHandler, ToolManager):
     async def _execute_tool_async(self, tool, arguments: dict, call_id: str, function_name: str) -> None:
         """Execute tool asynchronously without blocking."""
         try:
-            logger.info(f"🔧 Starting async execution of tool: {function_name}")
+            self.logger.info(f"🔧 Starting async execution of tool: {function_name}")
             
             # Execute the tool
             result = await tool.acall(**arguments)
@@ -145,17 +146,17 @@ class FunctionCallProcessor(EventHandler, ToolManager):
             if self.on_tool_result:
                 await self.on_tool_result(call_id, function_name, result)
             
-            logger.info(f"✅ Async tool execution completed: {function_name}")
+            self.logger.info(f"✅ Async tool execution completed: {function_name}")
             
         except Exception as e:
-            logger.error(f"❌ Async tool execution failed: {function_name} - {e}")
+            self.logger.error(f"❌ Async tool execution failed: {function_name} - {e}")
             if self.on_tool_error:
                 await self.on_tool_error(call_id, str(e))
     
     async def cancel_all_tasks(self) -> None:
         """Cancel all running tool tasks."""
         if self.active_tool_tasks:
-            logger.info(f"🛑 Cancelling {len(self.active_tool_tasks)} active tool tasks")
+            self.logger.info(f"🛑 Cancelling {len(self.active_tool_tasks)} active tool tasks")
             for task in self.active_tool_tasks.copy():
                 if not task.done():
                     task.cancel()
@@ -167,7 +168,7 @@ class FunctionCallProcessor(EventHandler, ToolManager):
     def clear_pending_calls(self) -> None:
         """Clear all pending function calls."""
         if self.pending_function_calls:
-            logger.info(f"🧹 Clearing {len(self.pending_function_calls)} pending function calls")
+            self.logger.info(f"🧹 Clearing {len(self.pending_function_calls)} pending function calls")
             self.pending_function_calls.clear()
     
     def get_status_info(self) -> Dict[str, Any]:

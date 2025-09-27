@@ -2,40 +2,40 @@ import logging
 from typing import Dict, Any, List
 from .base import EventHandler
 
-logger = logging.getLogger(__name__)
 
 
 class EventDispatcher:    
     def __init__(self):
         self.handlers: Dict[str, List[EventHandler]] = {}
         self.global_handlers: List[EventHandler] = []
-    
+        self.logger = logging.getLogger(__name__)
+
     def register_handler(self, event_type: str, handler: EventHandler) -> None:
         if event_type not in self.handlers:
             self.handlers[event_type] = []
         self.handlers[event_type].append(handler)
-        logger.debug(f"Registered handler for event type: {event_type}")
+        self.logger.debug(f"Registered handler for event type: {event_type}")
     
     def register_global_handler(self, handler: EventHandler) -> None:
         """Register a handler for all events."""
         self.global_handlers.append(handler)
-        logger.debug("Registered global event handler")
+        self.logger.debug("Registered global event handler")
     
     def unregister_handler(self, event_type: str, handler: EventHandler) -> None:
         """Unregister a handler for a specific event type."""
         if event_type in self.handlers and handler in self.handlers[event_type]:
             self.handlers[event_type].remove(handler)
-            logger.debug(f"Unregistered handler for event type: {event_type}")
+            self.logger.debug(f"Unregistered handler for event type: {event_type}")
     
     def unregister_global_handler(self, handler: EventHandler) -> None:
         """Unregister a global handler."""
         if handler in self.global_handlers:
             self.global_handlers.remove(handler)
-            logger.debug("Unregistered global event handler")
+            self.logger.debug("Unregistered global event handler")
     
     async def dispatch_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Dispatch an event to all registered handlers."""
-        logger.debug(f"📡 Dispatching event: {event_type}")
+        self.logger.debug(f"📡 Dispatching event: {event_type}")
         
         # Send to specific handlers
         if event_type in self.handlers:
@@ -43,14 +43,14 @@ class EventDispatcher:
                 try:
                     await handler.handle_event(event_type, data)
                 except Exception as e:
-                    logger.error(f"❌ Error in event handler for {event_type}: {e}")
+                    self.logger.error(f"❌ Error in event handler for {event_type}: {e}")
         
         # Send to global handlers
         for handler in self.global_handlers:
             try:
                 await handler.handle_event(event_type, data)
             except Exception as e:
-                logger.error(f"❌ Error in global event handler: {e}")
+                self.logger.error(f"❌ Error in global event handler: {e}")
     
     def get_handler_count(self, event_type: str = None) -> int:
         """Get the number of handlers for an event type or total handlers."""
@@ -67,11 +67,11 @@ class EventDispatcher:
         if event_type:
             if event_type in self.handlers:
                 self.handlers[event_type] = []
-                logger.info(f"Cleared handlers for event type: {event_type}")
+                self.logger.info(f"Cleared handlers for event type: {event_type}")
         else:
             self.handlers = {}
             self.global_handlers = []
-            logger.info("Cleared all event handlers")
+            self.logger.info("Cleared all event handlers")
 
 
 class OpenAIEventRouter(EventHandler):

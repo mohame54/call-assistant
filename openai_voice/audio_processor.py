@@ -4,8 +4,6 @@ import logging
 from typing import List, Optional, Dict, Any
 from .base import EventHandler
 
-logger = logging.getLogger(__name__)
-
 
 class AudioProcessor(EventHandler):    
     def __init__(self, max_memory_mb: int = 50, max_chunks_per_response: int = 1000):
@@ -14,6 +12,7 @@ class AudioProcessor(EventHandler):
         self.current_response_id: Optional[str] = None
         self.current_audio_size: int = 0
         
+        self.logger = logging.getLogger(__name__)
         # Audio memory management
         self.max_audio_memory_mb = max_memory_mb
         self.max_chunks_per_response = max_chunks_per_response
@@ -31,7 +30,7 @@ class AudioProcessor(EventHandler):
     def reset_for_new_response(self, response_id: str) -> None:
         """Reset audio accumulation for a new response."""
         if self.current_audio_chunks:
-            logger.debug(f"🧹 Clearing {len(self.current_audio_chunks)} chunks for new response")
+            self.logger.debug(f"🧹 Clearing {len(self.current_audio_chunks)} chunks for new response")
         
         self.current_audio_chunks = []
         self.current_response_id = response_id
@@ -52,14 +51,14 @@ class AudioProcessor(EventHandler):
         
         # Check memory limits
         if (self.current_audio_size + audio_size) > max_memory_bytes:
-            logger.warning(f"⚠️ Audio memory limit reached ({self.max_audio_memory_mb}MB)")
+            self.logger.warning(f"⚠️ Audio memory limit reached ({self.max_audio_memory_mb}MB)")
             if self.on_memory_limit_reached:
                 await self.on_memory_limit_reached(self.current_audio_chunks)
             return False
         
         # Check chunk limits
         if len(self.current_audio_chunks) >= self.max_chunks_per_response:
-            logger.warning(f"⚠️ Audio chunk limit reached ({self.max_chunks_per_response})")
+            self.logger.warning(f"⚠️ Audio chunk limit reached ({self.max_chunks_per_response})")
             if self.on_memory_limit_reached:
                 await self.on_memory_limit_reached(self.current_audio_chunks)
             return False
@@ -68,7 +67,7 @@ class AudioProcessor(EventHandler):
         self.current_audio_chunks.append(audio_data)
         self.current_audio_size += audio_size
         
-        logger.debug(f"🔊 Audio chunk added ({audio_size} bytes, total: {len(self.current_audio_chunks)} chunks, {self.current_audio_size / 1024:.1f} KB)")
+        self.logger.debug(f"🔊 Audio chunk added ({audio_size} bytes, total: {len(self.current_audio_chunks)} chunks, {self.current_audio_size / 1024:.1f} KB)")
         return True
     
     async def finalize_response(self) -> Optional[bytes]:
@@ -85,7 +84,7 @@ class AudioProcessor(EventHandler):
             total_chunks = len(self.current_audio_chunks)
             total_size = len(combined_audio)
             
-            logger.info(f"🔊 Finalizing audio response: {total_chunks} chunks, {total_size} bytes")
+            self.logger.info(f"🔊 Finalizing audio response: {total_chunks} chunks, {total_size} bytes")
             
             # Clear accumulation
             self.clear_accumulation()
@@ -96,13 +95,13 @@ class AudioProcessor(EventHandler):
             return combined_audio
             
         except Exception as e:
-            logger.error(f"❌ Error finalizing audio response: {e}")
+            self.logger.error(f"❌ Error finalizing audio response: {e}")
             return None
     
     def clear_accumulation(self) -> None:
         """Clear all accumulated audio data."""
         if self.current_audio_chunks:
-            logger.info(f"🧹 Clearing {len(self.current_audio_chunks)} accumulated audio chunks ({self.current_audio_size / 1024 / 1024:.2f} MB)")
+            self.logger.info(f"🧹 Clearing {len(self.current_audio_chunks)} accumulated audio chunks ({self.current_audio_size / 1024 / 1024:.2f} MB)")
         
         self.current_audio_chunks = []
         self.current_response_id = None
@@ -119,7 +118,7 @@ class AudioProcessor(EventHandler):
         if self.audio_start_time is None:
             self.audio_start_time = time.time() * 1000
         
-        logger.debug(f"📊 Input audio tracked: {len(audio_data)} bytes ({audio_duration_ms:.1f}ms)")
+        self.logger.debug(f"📊 Input audio tracked: {len(audio_data)} bytes ({audio_duration_ms:.1f}ms)")
     
     def calculate_interrupt_timing(self) -> int:
         """Calculate proper timing for audio interruption."""
@@ -162,7 +161,7 @@ class AudioProcessor(EventHandler):
             # Handle output audio deltas from OpenAI (for assistant speech)
             audio_data = base64.b64decode(data.get('delta', ''))
             item_id = data.get('item_id', '')
-            logger.debug(f"🔊 Processing output audio delta: {len(audio_data)} bytes, item_id: {item_id}")
+            self.logger.debug(f"🔊 Processing output audio delta: {len(audio_data)} bytes, item_id: {item_id}")
             await self.add_audio_chunk(audio_data, item_id)
         
         elif event_type == "response_done":

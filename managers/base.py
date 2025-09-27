@@ -5,7 +5,6 @@ import logging
 import json
 from fastapi import WebSocket
 
-logger = logging.getLogger(__name__)
 
 
 class BaseConnectionManager(ABC):    
@@ -14,6 +13,7 @@ class BaseConnectionManager(ABC):
         self.voice_assistants: Dict[str, Any] = {}
         self.initial_message = initial_message
         self._shutdown_event = asyncio.Event()
+        self.logger = logging.getLogger(__name__)
     
     @abstractmethod
     async def connect(self, websocket: WebSocket, session_id: str) -> None:
@@ -65,10 +65,10 @@ class BaseConnectionManager(ABC):
                     await assistant.disconnect()
                 del self.voice_assistants[session_id]
                 
-            logger.info(f"🧹 Cleaned up session {session_id}")
+            self.logger.info(f"🧹 Cleaned up session {session_id}")
             
         except Exception as e:
-            logger.error(f"Error during session cleanup for {session_id}: {e}")
+            self.logger.error(f"Error during session cleanup for {session_id}: {e}")
     
     async def broadcast_message(self, message: dict, exclude_session: Optional[str] = None) -> None:
         """Broadcast a message to all active connections except the excluded one."""
@@ -86,12 +86,12 @@ class BaseConnectionManager(ABC):
         try:
             await websocket.send_text(json.dumps(message))
         except Exception as e:
-            logger.error(f"Error sending JSON message to session {session_id}: {e}")
+            self.logger.error(f"Error sending JSON message to session {session_id}: {e}")
             await self.disconnect(session_id)
     
     async def shutdown_all(self) -> None:
         try:
-            logger.info(f"🛑 Shutting down connection manager with {len(self.active_connections)} active sessions")
+            self.logger.info(f"🛑 Shutting down connection manager with {len(self.active_connections)} active sessions")
             
             # Signal shutdown
             self._shutdown_event.set()
@@ -104,10 +104,10 @@ class BaseConnectionManager(ABC):
             if disconnect_tasks:
                 await asyncio.gather(*disconnect_tasks, return_exceptions=True)
             
-            logger.info("✅ Connection manager shutdown complete")
+            self.logger.info("✅ Connection manager shutdown complete")
             
         except Exception as e:
-            logger.error(f"Error during connection manager shutdown: {e}")
+            self.logger.error(f"Error during connection manager shutdown: {e}")
     
     def get_health_status(self) -> Dict[str, Any]:
         """Get health status of the connection manager."""
@@ -150,7 +150,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
             return audio_handler, assistant
             
         except Exception as e:
-            logger.error(f"Error setting up audio session {session_id}: {e}")
+            self.logger.error(f"Error setting up audio session {session_id}: {e}")
             await self.cleanup_session(session_id)
             raise
     
@@ -168,7 +168,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
             await super().cleanup_session(session_id)
             
         except Exception as e:
-            logger.error(f"Error during audio session cleanup for {session_id}: {e}")
+            self.logger.error(f"Error during audio session cleanup for {session_id}: {e}")
     
     def get_health_status(self) -> Dict[str, Any]:
         """Get enhanced health status including audio handlers."""

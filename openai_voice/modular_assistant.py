@@ -12,8 +12,6 @@ from .function_call_processor import FunctionCallProcessor
 from .session_manager import SessionManager
 from .event_dispatcher import EventDispatcher, OpenAIEventRouter
 
-logger = logging.getLogger(__name__)
-
 
 class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):    
     def __init__(
@@ -30,6 +28,8 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         self.audio_handler = audio_handler
         
         # Initialize components
+        self.logger = logging.getLogger(__name__)
+
         self._initialize_components(non_blocking_tools_calling)
         
         # Setup event routing
@@ -112,7 +112,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             self.set_state(VoiceAssistantState.CONNECTED)
             
         except Exception as e:
-            logger.error(f"Failed to connect: {e}")
+            self.logger.error(f"Failed to connect: {e}")
             self.set_state(VoiceAssistantState.ERROR)
             if self.on_error:
                 await self.on_error(f"Connection failed: {e}")
@@ -131,7 +131,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         await self.connection_manager.disconnect()
         
         self.set_state(VoiceAssistantState.DISCONNECTED)
-        logger.info("Assistant disconnected successfully")
+        self.logger.info("Assistant disconnected successfully")
     
     async def start_conversation(self, initial_message: str = None) -> None:
         """Start a conversation with optional initial message."""
@@ -145,7 +145,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             )
         
         # Start processing loops
-        logger.info(f"🚀 Starting conversation loops for session {self.session_id}")
+        self.logger.info(f"🚀 Starting conversation loops for session {self.session_id}")
         await asyncio.gather(
             self._audio_input_loop(),
             self.connection_manager.start_message_loop()
@@ -169,7 +169,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         await self.connection_manager.send_message(conversation_item)
         await self.connection_manager.send_message({"type": "response.create"})
         
-        logger.info(f"✅ Text message sent: '{message[:50]}...'")
+        self.logger.info(f"✅ Text message sent: '{message[:50]}...'")
     
     async def send_audio_data(self, audio_data: bytes) -> None:
         self.audio_processor.track_input_audio(audio_data)
@@ -182,7 +182,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         }
         
         await self.connection_manager.send_message(audio_append)
-        logger.debug(f"✅ Audio data sent: {len(audio_data)} bytes")
+        self.logger.debug(f"✅ Audio data sent: {len(audio_data)} bytes")
     
     async def interrupt_response(self) -> None:
         """Interrupt the current assistant response."""
@@ -204,9 +204,9 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             if self.audio_handler:
                 await self.audio_handler.clear_audio_buffer()
             
-            logger.info(f"Interrupted response (audio_end_ms: {audio_end_ms}ms)")
+            self.logger.info(f"Interrupted response (audio_end_ms: {audio_end_ms}ms)")
         else:
-            logger.warning("⚠️ No active response to interrupt")
+            self.logger.warning("⚠️ No active response to interrupt")
     
     # Tool management methods
     
@@ -232,18 +232,18 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         try:
             if self.audio_handler:
                 await self.audio_handler.send_audio(audio_data)
-                logger.info(f"🔊 Forwarded {len(audio_data)} bytes of audio to WebSocket handler")
+                self.logger.info(f"🔊 Forwarded {len(audio_data)} bytes of audio to WebSocket handler")
             else:
-                logger.warning("⚠️ No audio handler available to send audio")
+                self.logger.warning("⚠️ No audio handler available to send audio")
         except Exception as e:
-            logger.error(f"❌ Error forwarding audio to handler: {e}", exc_info=True)
+            self.logger.error(f"❌ Error forwarding audio to handler: {e}", exc_info=True)
     
     async def _handle_audio_memory_limit(self, current_chunks: list) -> None:
         """Handle audio memory limit reached by sending accumulated audio."""
         if current_chunks and self.audio_handler:
             combined_audio = b''.join(current_chunks)
             await self.audio_handler.send_audio(combined_audio)
-            logger.info(f"🔊 Sent early audio batch due to memory limit: {len(current_chunks)} chunks, {len(combined_audio)} bytes")
+            self.logger.info(f"🔊 Sent early audio batch due to memory limit: {len(current_chunks)} chunks, {len(combined_audio)} bytes")
     
     async def _handle_connection_lost(self, error: Exception) -> None:
         """Handle lost connection to OpenAI."""
@@ -251,10 +251,10 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         
         # Check if it's a keepalive timeout
         if "keepalive ping timeout" in error_msg or "1011" in error_msg:
-            logger.warning("⚠️ OpenAI connection lost due to keepalive timeout - this is usually network related")
-            logger.info("💡 Tips to prevent this:")
+            self.logger.warning("⚠️ OpenAI connection lost due to keepalive timeout - this is usually network related")
+            self.logger.info("💡 Tips to prevent this:")
         else:
-            logger.error(f"❌ Connection to OpenAI lost: {error}")
+            self.logger.error(f"❌ Connection to OpenAI lost: {error}")
         
         self.set_state(VoiceAssistantState.ERROR)
         if self.on_error:
@@ -265,11 +265,11 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         
         # Log important events only, reduce audio spam
         if response_type in ['error', 'session.created', 'session.updated']:
-            logger.info(f"📥 OpenAI event: {response_type}")
+            self.logger.info(f"📥 OpenAI event: {response_type}")
         elif response_type in ['response.output_audio.done', 'response.done']:
-            logger.info(f"🔊 Audio event: {response_type}")
+            self.logger.info(f"🔊 Audio event: {response_type}")
         else:
-            logger.debug(f"📥 OpenAI event: {response_type}")
+            self.logger.debug(f"📥 OpenAI event: {response_type}")
         
         await self.openai_event_router.handle_event(response_type, message)
         
@@ -300,7 +300,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         elif response_type == 'response.output_audio_transcript.done':
             # Log complete transcript when done
             if hasattr(self, '_current_transcript') and self._current_transcript:
-                logger.info(f"💬 AI Complete Response: {self._current_transcript.strip()}")
+                self.logger.info(f"💬 AI Complete Response: {self._current_transcript.strip()}")
                 self._current_transcript = ""
         
         elif response_type == 'error':
@@ -313,15 +313,15 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         error_type = error_details.get('type', 'unknown')
         error_code = error_details.get('code', 'unknown')
         
-        logger.error(f"❌ OpenAI error: {error_msg}")
-        logger.error(f"   Error type: {error_type}, Code: {error_code}")
+        self.logger.error(f"❌ OpenAI error: {error_msg}")
+        self.logger.error(f"   Error type: {error_type}, Code: {error_code}")
         
         if self.on_error:
             await self.on_error(f"OpenAI error: {error_msg}")
     
     async def _handle_connection_lost(self, error) -> None:
         """Handle connection loss."""
-        logger.error(f"❌ Connection lost: {error}")
+        self.logger.error(f"❌ Connection lost: {error}")
         self.set_state(VoiceAssistantState.ERROR)
         if self.on_error:
             await self.on_error(f"Connection lost: {error}")
@@ -333,14 +333,14 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
     
     async def _handle_audio_memory_limit(self, current_chunks: list) -> None:
         """Handle audio memory limit reached."""
-        logger.warning("🔊 Sending audio early due to memory limits")
+        self.logger.warning("🔊 Sending audio early due to memory limits")
         if self.audio_handler and current_chunks:
             combined_audio = b''.join(current_chunks)
             await self.audio_handler.send_audio(combined_audio)
     
     async def _handle_tool_started(self, tool_name: str, call_id: str) -> None:
         """Handle tool execution started - send immediate acknowledgment."""
-        logger.info(f"🔧 Tool started: {tool_name} (call_id: {call_id})")
+        self.logger.info(f"🔧 Tool started: {tool_name} (call_id: {call_id})")
         
         # Send immediate response to prevent AI blocking
         immediate_response = {
@@ -355,7 +355,7 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             }
         }
         await self.connection_manager.send_message(immediate_response)
-        logger.info(f"📤 Sent immediate tool acknowledgment for: {tool_name}")
+        self.logger.info(f"📤 Sent immediate tool acknowledgment for: {tool_name}")
     
     async def _handle_tool_result(self, call_id: str, tool_name: str, result) -> None:
         """Handle tool execution result."""
@@ -378,12 +378,12 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             if not is_immediate:
                 await asyncio.sleep(0.1)  # Prevent timing conflicts
                 await self.connection_manager.send_message({"type": "response.create"})
-                logger.info(f"📤 Sent final tool result for: {tool_name}")
+                self.logger.info(f"📤 Sent final tool result for: {tool_name}")
             else:
-                logger.info(f"📤 Sent immediate acknowledgment for: {tool_name}")
+                self.logger.info(f"📤 Sent immediate acknowledgment for: {tool_name}")
                 
         except Exception as e:
-            logger.error(f"❌ Failed to send tool result for {tool_name}: {e}", exc_info=True)
+            self.logger.error(f"❌ Failed to send tool result for {tool_name}: {e}", exc_info=True)
     
     async def _handle_tool_error(self, call_id: str, error_message: str) -> None:
         """Handle tool execution error."""
@@ -400,37 +400,37 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         await asyncio.sleep(0.1)  # Prevent timing conflicts
         await self.connection_manager.send_message({"type": "response.create"})
         
-        logger.info(f"📤 Sent tool error: {error_message}")
+        self.logger.info(f"📤 Sent tool error: {error_message}")
     
     async def _handle_session_created(self) -> None:
         """Handle session created event."""
-        logger.info("✅ Session ready for conversation")
+        self.logger.info("✅ Session ready for conversation")
     
     async def _handle_session_error(self, error_message: str) -> None:
         """Handle session error."""
-        logger.error(f"❌ Session error: {error_message}")
+        self.logger.error(f"❌ Session error: {error_message}")
         self.set_state(VoiceAssistantState.ERROR)
         if self.on_error:
             await self.on_error(f"Session error: {error_message}")
     
     async def _audio_input_loop(self) -> None:
         if not self.audio_handler:
-            logger.warning("No audio handler available")
+            self.logger.warning("No audio handler available")
             return
         
-        logger.info(f"🎤 Starting audio input loop for session {self.session_id}")
+        self.logger.info(f"🎤 Starting audio input loop for session {self.session_id}")
         try:
             while self.state in [VoiceAssistantState.CONNECTED, VoiceAssistantState.LISTENING]:
                 audio_data = await self.audio_handler.receive_audio()
                 if audio_data:
-                    logger.debug(f"🎤 Processing input audio: {len(audio_data)} bytes")
+                    self.logger.debug(f"🎤 Processing input audio: {len(audio_data)} bytes")
                     await self.send_audio_data(audio_data)
                 await asyncio.sleep(0.01)
                 
         except Exception as e:
-            logger.error(f"Audio input loop error: {e}")
+            self.logger.error(f"Audio input loop error: {e}")
             if self.on_error:
                 await self.on_error(f"Audio input error: {e}")
         
-        logger.info(f"🎤 Audio input loop ended for session {self.session_id}")
+        self.logger.info(f"🎤 Audio input loop ended for session {self.session_id}")
 
