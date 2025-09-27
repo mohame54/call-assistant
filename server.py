@@ -127,7 +127,7 @@ async def health_check(request: Request):
     twilio_manager: TwilioConnectionManager = request.app.state.twilio_manager
     return {
         "status": "healthy", 
-        "active_calls": len(twilio_manager.active_calls),
+        "active_calls": len(twilio_manager.active_connections),
         "active_assistants": len(twilio_manager.voice_assistants)
     }
 
@@ -138,13 +138,13 @@ async def get_active_calls(request: Request):
     twilio_manager: TwilioConnectionManager = request.app.state.twilio_manager
     calls = []
     
-    for call_sid in twilio_manager.active_calls.keys():
+    for call_sid in twilio_manager.active_connections.keys():
         assistant = twilio_manager.voice_assistants.get(call_sid)
         call_info = {
             "call_sid": call_sid,
-            "stream_sid": twilio_manager.active_calls[call_sid].get('stream_sid'),
+            "stream_sid": twilio_manager.active_connections[call_sid].get('stream_sid'),
             "state": assistant.state.value if assistant else "unknown",
-            "connected_at": twilio_manager.active_calls[call_sid].get('connected_at')
+            "connected_at": twilio_manager.active_connections[call_sid].get('connected_at')
         }
         
         # Add audio memory information if assistant is available

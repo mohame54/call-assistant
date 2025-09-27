@@ -1,4 +1,4 @@
-from .Tools import MealPlanRequest, BaseTool, openai_tool
+from .Tools import BaseTool, openai_tool
 
 
 __all__ = [

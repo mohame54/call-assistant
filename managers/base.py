@@ -4,20 +4,21 @@ import asyncio
 import logging
 import json
 from fastapi import WebSocket
+from audio_handlers import AudioHandler
+from openai_voice import RealTimeOpenAiVoiceAssistantV2
 
 
 class BaseConnectionManager(ABC):    
     def __init__(self, initial_message: Optional[str] = None):
         self.active_connections: Dict[str, dict] = {}
-        self.voice_assistants: Dict[str, Any] = {}
+        self.voice_assistants: Dict[str, RealTimeOpenAiVoiceAssistantV2] = {}
         self.initial_message = initial_message
         self._shutdown_event = asyncio.Event()
         self.logger = logging.getLogger(__name__)
     
-    @abstractmethod
+
     async def connect(self, websocket: WebSocket, session_id: str) -> None:
-        """Establish a new connection."""
-        pass
+        await websocket.accept()
     
     @abstractmethod
     async def disconnect(self, session_id: str) -> None:
@@ -123,7 +124,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
     
     def __init__(self, initial_message: Optional[str] = None):
         super().__init__(initial_message)
-        self.audio_handlers: Dict[str, Any] = {}
+        self.audio_handlers: Dict[str, AudioHandler] = {}
     
     @abstractmethod
     async def create_audio_handler(self, websocket: WebSocket, session_id: str) -> Any:
@@ -145,7 +146,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
             # Create voice assistant for this session
             assistant = await self.create_voice_assistant(session_id, audio_handler)
             self.voice_assistants[session_id] = assistant
-            
+    
             return audio_handler, assistant
             
         except Exception as e:

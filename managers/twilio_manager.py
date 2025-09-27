@@ -22,7 +22,7 @@ class TwilioConnectionManager(BaseAudioConnectionManager):
         self.logger = logging.getLogger(__name__)
         
     async def connect(self, websocket: WebSocket, call_sid: str):
-        await websocket.accept()
+        await super().connect(websocket, call_sid)
         self.active_connections[call_sid] = {
             'websocket': websocket,
             'stream_sid': None,
@@ -49,26 +49,20 @@ class TwilioConnectionManager(BaseAudioConnectionManager):
         """Create a Twilio audio handler for the session."""
         return TwilioAudioHandler(websocket, session_id, self)
     
-    async def create_voice_assistant(self, session_id: str, audio_handler: TwilioAudioHandler) -> RealTimeOpenAiVoiceAssistantV2:
-        """Create a voice assistant for the session."""
+    async def create_voice_assistant(self, session_id: str, audio_handler: TwilioAudioHandler, **kwargs) -> RealTimeOpenAiVoiceAssistantV2:
         return await create_twilio_voice_assistant(
             session_id,
             manager=self,
-            audio_handler=audio_handler
+            audio_handler=audio_handler,
+            **kwargs
         )
     
     async def handle_message_stream(self, websocket: WebSocket, call_sid: str):
         """Handle Twilio media stream - alias for compatibility."""
         try:
             # Create audio handler and store it
-            audio_handler = await self.create_audio_handler(websocket, call_sid)
-            self.audio_handlers[call_sid] = audio_handler
-            
-            # Create voice assistant for this call
-            assistant = await self.create_voice_assistant(call_sid, audio_handler)
-            self.voice_assistants[call_sid] = assistant
-            
-    
+            audio_handler, assistant = await self.setup_audio_session(websocket, call_sid)
+        
             await assistant.connect()
             
             async for message in websocket.iter_text():
@@ -124,7 +118,7 @@ async def create_twilio_voice_assistant(
     # Twilio-specific configuration
     if audio_config is None:
         audio_config = AudioConfig(
-            input_format="g711_ulaw",
+            input_format="g711_ulaw", # Twilio uses 8kHz
             output_format="g711_ulaw",
             voice="alloy",
             sample_rate=8000,  # Twilio uses 8kHz
