@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
@@ -74,13 +75,12 @@ async def index_page():
 
 @app.api_route("/incoming-call", methods=["GET", "POST"])
 async def handle_incoming_call(request: Request):
-    """Handle incoming Twilio call and return TwiML response to connect to Media Stream."""
     twilio_config: TwilioConfig = request.app.state.twilio_config
     
     response = VoiceResponse()
-    
+    greet_message = os.environ.get("TWILIO_GREETING_MSSG", twilio_config.greeting_message)
     response.say(
-        twilio_config.greeting_message,
+        greet_message,
         voice=twilio_config.twilio_voice
     )
     
@@ -120,7 +120,7 @@ async def handle_media_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("📞 Twilio Media Stream WebSocket disconnected")
     except Exception as e:
-        logger.error(f"Error in Twilio media stream: {e}")
+        logger.error(f"Error in Twilio media stream: {e}", exc_info=True)
 
 
 @app.get("/health")

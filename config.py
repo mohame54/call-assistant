@@ -54,10 +54,10 @@ class TwilioConfig:
     openai_voice: Optional[SUPPORTED_OPENAI_VOICES] = "alloy"
     greeting_message: str = (
         "Please wait while we connect your call to the A. I. voice assistant, "
-        "powered by Twilio and the Open A I Realtime API"
+        "Built By Mohammed Ayman an A I Engineer"
     )
     ready_message: str = "O.K. you can start talking!"
-    pause_length: int = 1  # seconds
+    pause_length: int = 1 
     
     # Audio processing settings
     max_audio_memory_mb: int = 50
