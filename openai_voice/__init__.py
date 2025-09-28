@@ -4,8 +4,6 @@ OpenAI Voice Assistant Package
 This package provides both monolithic and modular implementations of the OpenAI Realtime Voice Assistant.
 """
 
-# Original monolithic implementation
-from .assistant import RealTimeOpenAiVoiceAssistant
 
 # New modular implementation
 from .modular_assistant import RealTimeOpenAiVoiceAssistantV2
