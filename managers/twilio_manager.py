@@ -11,7 +11,8 @@ from config import (
     AudioConfig,
     SessionConfig,
     VadConfig,
-    OpenAIConfig
+    OpenAIConfig,
+    AudioStreamingMode
 )
 from prompts import VOICE_AI_ASSISTANT
 
@@ -112,7 +113,11 @@ async def create_twilio_voice_assistant(
             output_format="audio/pcmu",
             voice="alloy",
             sample_rate=8000,  # Twilio uses 8kHz
-            channels=1
+            channels=1,
+            streaming_mode=AudioStreamingMode.WINDOWED,
+            window_size_chunks=5,
+            window_timeout_ms=500,
+            immediate_threshold_bytes=1024
         )
     
     if openai_config is None:

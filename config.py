@@ -33,14 +33,27 @@ class VadConfig:
     silence_duration_ms: Optional[int] = 500
 
 
+class AudioStreamingMode(Enum):
+    """Audio streaming mode enumeration"""
+    ACCUMULATE = "accumulate"          # Accumulate all deltas, send complete response
+    INDIVIDUAL = "individual"          # Send each delta immediately  
+    WINDOWED = "windowed"             # Send deltas in windows/batches
+
+
 @dataclass
 class AudioConfig:
     input_format: Optional[str] = "audio/pcmu"
     output_format: Optional[str] = "audio/pcmu"
     voice: Optional[SUPPORTED_OPENAI_VOICES] = "alloy"
-    sample_rate: Optional[int] = 24000
+    sample_rate: Optional[int] = 8000
     channels: Optional[int] = 1
     speed: Optional[float] = 1.0
+    
+    # Audio streaming configuration
+    streaming_mode: AudioStreamingMode = AudioStreamingMode.ACCUMULATE
+    window_size_chunks: int = 10       # For windowed mode: chunks per window
+    window_timeout_ms: int = 200       # For windowed mode: max time per window
+    immediate_threshold_bytes: int = 1024  # Send immediately if chunk >= this size
 
 
 @dataclass

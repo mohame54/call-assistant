@@ -149,10 +149,10 @@ async def get_active_calls(request: Request):
         
         # Add audio memory information if assistant is available
         if assistant and hasattr(assistant, 'get_audio_memory_info'):
-            call_info["audio_memory"] = assistant.get_audio_memory_info()
+            audio_info = assistant.get_audio_memory_info()
+            call_info["audio_memory"] = audio_info
+            call_info["streaming_mode"] = audio_info.get("streaming_mode", "unknown")
         
         calls.append(call_info)
     
     return {"calls": calls}
-
-

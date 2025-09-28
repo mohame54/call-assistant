@@ -46,9 +46,15 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
             self.session_config.openai_config.model
         )
         
+        # Get audio streaming configuration
+        audio_config = self.session_config.audio_config
         self.audio_processor = AudioProcessor(
             max_memory_mb=50,
-            max_chunks_per_response=1000
+            max_chunks_per_response=1000,
+            streaming_mode=audio_config.streaming_mode,
+            window_size_chunks=audio_config.window_size_chunks,
+            window_timeout_ms=audio_config.window_timeout_ms,
+            immediate_threshold_bytes=audio_config.immediate_threshold_bytes
         )
         
         self.function_call_processor = FunctionCallProcessor(
@@ -218,12 +224,28 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         """Remove a tool from the assistant."""
         self.function_call_processor.remove_tool(tool_name)
     
+    # Audio streaming management methods
+    
+    def get_streaming_mode(self) -> str:
+        """Get current audio streaming mode."""
+        return self.audio_processor.streaming_mode.value
+    
     def get_audio_memory_info(self) -> dict:
         """Get audio memory and processing information."""
         audio_info = self.audio_processor.get_memory_info()
         function_info = self.function_call_processor.get_status_info()
         
         return {**audio_info, **function_info}
+    
+    def set_audio_streaming_mode(self, mode, **kwargs):
+        """Change audio streaming mode dynamically."""
+        from config import AudioStreamingMode
+        
+        if isinstance(mode, str):
+            mode = AudioStreamingMode(mode)
+        
+        self.audio_processor.set_streaming_mode(mode, **kwargs)
+        self.logger.info(f"Audio streaming mode changed to: {mode.value}")
     
     # Private event handling methods
     
