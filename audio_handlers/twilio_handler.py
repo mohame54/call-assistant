@@ -46,7 +46,7 @@ class TwilioAudioHandler(AudioHandler):
                     if audio_data is None:  # Shutdown signal
                         break
                     
-                    # Convert PCM16 to µ-law for Twilio
+                    # Encode audio data to base64 for Twilio (already in pcmu format from OpenAI)
                     if isinstance(audio_data, bytes):
                         audio_payload = encode_audio(audio_data)
                     else:

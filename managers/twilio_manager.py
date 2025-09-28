@@ -117,7 +117,7 @@ async def create_twilio_voice_assistant(
     
     if openai_config is None:
         openai_config = OpenAIConfig(
-            model="gpt-4o-realtime-preview",
+            model="gpt-realtime",
             temperature=0.8,
             instructions=VOICE_AI_ASSISTANT
         )
