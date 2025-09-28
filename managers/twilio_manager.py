@@ -118,8 +118,8 @@ async def create_twilio_voice_assistant(
     # Twilio-specific configuration
     if audio_config is None:
         audio_config = AudioConfig(
-            input_format="g711_ulaw", # Twilio uses 8kHz
-            output_format="g711_ulaw",
+            input_format="audio/pcmu", # Twilio uses audio/pcmu
+            output_format="audio/pcmu",
             voice="alloy",
             sample_rate=8000,  # Twilio uses 8kHz
             channels=1

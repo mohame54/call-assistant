@@ -35,8 +35,8 @@ class VadConfig:
 
 @dataclass
 class AudioConfig:
-    input_format: Optional[str] = "g711_ulaw"
-    output_format: Optional[str] = "g711_ulaw"
+    input_format: Optional[str] = "audio/pcmu"
+    output_format: Optional[str] = "audio/pcmu"
     voice: Optional[SUPPORTED_OPENAI_VOICES] = "alloy"
     sample_rate: Optional[int] = 24000
     channels: Optional[int] = 1
@@ -46,8 +46,8 @@ class AudioConfig:
 @dataclass
 class TwilioConfig:
     twilio_voice: str = "Google.en-US-Chirp3-HD-Aoede"
-    input_format: str = "g711_ulaw"  # µ-law format
-    output_format: str = "g711_ulaw"  # µ-law format
+    input_format: str = "audio/pcmu"  # µ-law format
+    output_format: str = "audio/pcmu"  # µ-law format
     sample_rate: int = 8000  # Twilio uses 8kHz
     channels: int = 1
     
