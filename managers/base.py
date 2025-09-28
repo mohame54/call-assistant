@@ -135,7 +135,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
         """Create a voice assistant for the session - to be implemented by subclasses."""
         pass
     
-    async def setup_audio_session(self, websocket: WebSocket, session_id: str, assistant_kwargs) -> tuple:
+    async def setup_audio_session(self, websocket: WebSocket, session_id: str, assistant_kwargs: Optional[dict] = None) -> tuple:
         """Common setup for audio sessions. Returns (audio_handler, voice_assistant)."""
         try:
             # Create audio handler and store it
@@ -143,6 +143,8 @@ class BaseAudioConnectionManager(BaseConnectionManager):
             self.audio_handlers[session_id] = audio_handler
             
             # Create voice assistant for this session
+            if not assistant_kwargs:
+                assistant_kwargs = {} 
             assistant = await self.create_voice_assistant(session_id, audio_handler, **assistant_kwargs)
             self.voice_assistants[session_id] = assistant
     
