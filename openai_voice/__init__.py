@@ -19,9 +19,7 @@ from .session_manager import SessionManager
 from .event_dispatcher import EventDispatcher, OpenAIEventRouter
 
 __all__ = [
-    # Main assistant classes
-    'RealTimeOpenAiVoiceAssistant',          # Original
-    'RealTimeOpenAiVoiceAssistantV2',   # New modular version
+    'RealTimeOpenAiVoiceAssistantV2', 
     
     # Base classes
     'BaseVoiceAssistant',
