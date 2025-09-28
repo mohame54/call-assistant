@@ -27,7 +27,18 @@ class SessionManager(EventHandler):
                 tool_json = tool.json
                 tool_json.update({"type": "function"})
                 tools_config.append(tool_json)
-        
+        inp_audio_format = {
+            "type": self.session_config.audio_config.input_format,
+        }
+        out_audio_format = {
+            "type": self.session_config.audio_config.output_format,
+        }
+        supported_audios_with_rates = ["audio/pcm"]
+        if inp_audio_format['type'] in supported_audios_with_rates:
+            inp_audio_format.update({ "rate": self.session_config.audio_config.sample_rate})
+       
+        if out_audio_format['type'] in supported_audios_with_rates:
+            out_audio_format.update({'rate':self.session_config.audio_config.sample_rate})
         session_update = {
             "type": "session.update",
             "session": {
@@ -37,10 +48,7 @@ class SessionManager(EventHandler):
                 "tool_choice": "auto" if tools_config else "none",
                 "audio": {
                     "input": {
-                        "format": {
-                            "type": self.session_config.audio_config.input_format,
-                            "rate": self.session_config.audio_config.sample_rate
-                        },
+                        "format": inp_audio_format,
                         "turn_detection": {
                             "type": self.session_config.turn_detection_type.name,
                             "create_response": self.session_config.turn_detection_type.create_response,
@@ -50,10 +58,7 @@ class SessionManager(EventHandler):
                         },
                     },
                     "output": {
-                        "format": {
-                            "type": self.session_config.audio_config.output_format,
-                            "rate": self.session_config.audio_config.sample_rate
-                        },
+                        "format": out_audio_format,
                         "voice": self.session_config.audio_config.voice,
                         "speed": self.session_config.audio_config.speed
                     },

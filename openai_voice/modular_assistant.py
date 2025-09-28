@@ -319,7 +319,6 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         if self.on_error:
             await self.on_error(f"OpenAI error: {error_msg}")
     
-    
     async def _handle_tool_started(self, tool_name: str, call_id: str) -> None:
         """Handle tool execution started - send immediate acknowledgment."""
         self.logger.info(f"🔧 Tool started: {tool_name} (call_id: {call_id})")
