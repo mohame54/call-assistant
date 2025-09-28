@@ -808,3 +808,4 @@ print(f"Active audio handlers: {status['active_audio_handlers']}")
 ```
 
 This guide provides a complete foundation for extending the framework to any audio platform. The key is following the established patterns and implementing the required abstract methods while leveraging the concrete functionality provided by the base classes.
+

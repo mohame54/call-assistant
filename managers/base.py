@@ -76,7 +76,7 @@ class BaseConnectionManager(ABC):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
     
-    async def send_message(self, session_id: str, websocket: WebSocket, message: dict) -> None:
+    async def send_message(self, session_id: str, message: dict) -> None:
         """Common method to send JSON messages via websocket."""
         if session_id in self.active_connections:
             websocket = self.active_connections[session_id]['websocket']

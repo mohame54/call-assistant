@@ -319,24 +319,6 @@ class RealTimeOpenAiVoiceAssistantV2(BaseVoiceAssistant):
         if self.on_error:
             await self.on_error(f"OpenAI error: {error_msg}")
     
-    async def _handle_connection_lost(self, error) -> None:
-        """Handle connection loss."""
-        self.logger.error(f"❌ Connection lost: {error}")
-        self.set_state(VoiceAssistantState.ERROR)
-        if self.on_error:
-            await self.on_error(f"Connection lost: {error}")
-    
-    async def _send_audio_to_handler(self, audio_data: bytes) -> None:
-        """Send audio to the audio handler."""
-        if self.audio_handler:
-            await self.audio_handler.send_audio(audio_data)
-    
-    async def _handle_audio_memory_limit(self, current_chunks: list) -> None:
-        """Handle audio memory limit reached."""
-        self.logger.warning("🔊 Sending audio early due to memory limits")
-        if self.audio_handler and current_chunks:
-            combined_audio = b''.join(current_chunks)
-            await self.audio_handler.send_audio(combined_audio)
     
     async def _handle_tool_started(self, tool_name: str, call_id: str) -> None:
         """Handle tool execution started - send immediate acknowledgment."""
