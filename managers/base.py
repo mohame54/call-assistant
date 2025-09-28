@@ -26,11 +26,6 @@ class BaseConnectionManager(ABC):
         pass
     
     @abstractmethod
-    async def send_message(self, session_id: str, message: dict) -> None:
-        """Send a message to a specific session."""
-        pass
-    
-    @abstractmethod
     async def handle_message_stream(self, websocket: WebSocket, session_id: str) -> None:
         """Handle incoming message stream from websocket."""
         pass
@@ -81,13 +76,17 @@ class BaseConnectionManager(ABC):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
     
-    async def send_json_message(self, session_id: str, websocket: WebSocket, message: dict) -> None:
+    async def send_message(self, session_id: str, websocket: WebSocket, message: dict) -> None:
         """Common method to send JSON messages via websocket."""
-        try:
-            await websocket.send_text(json.dumps(message))
-        except Exception as e:
-            self.logger.error(f"Error sending JSON message to session {session_id}: {e}")
-            await self.disconnect(session_id)
+        if session_id in self.active_connections:
+            websocket = self.active_connections[session_id]['websocket']
+            try:
+                await websocket.send_text(json.dumps(message))
+            except Exception as e:
+                self.logger.error(f"Error sending message to Twilio call {session_id}: {e}")
+                await self.disconnect(session_id)
+        else:
+            self.logger.error(f"Error session: {session_id} hasn't been initialized")
     
     async def shutdown_all(self) -> None:
         try:
@@ -132,11 +131,11 @@ class BaseAudioConnectionManager(BaseConnectionManager):
         pass
     
     @abstractmethod
-    async def create_voice_assistant(self, session_id: str, audio_handler: Any) -> Any:
+    async def create_voice_assistant(self, session_id: str, audio_handler: Any, **kwargs) -> Any:
         """Create a voice assistant for the session - to be implemented by subclasses."""
         pass
     
-    async def setup_audio_session(self, websocket: WebSocket, session_id: str) -> tuple:
+    async def setup_audio_session(self, websocket: WebSocket, session_id: str, assistant_kwargs) -> tuple:
         """Common setup for audio sessions. Returns (audio_handler, voice_assistant)."""
         try:
             # Create audio handler and store it
@@ -144,7 +143,7 @@ class BaseAudioConnectionManager(BaseConnectionManager):
             self.audio_handlers[session_id] = audio_handler
             
             # Create voice assistant for this session
-            assistant = await self.create_voice_assistant(session_id, audio_handler)
+            assistant = await self.create_voice_assistant(session_id, audio_handler, **assistant_kwargs)
             self.voice_assistants[session_id] = assistant
     
             return audio_handler, assistant

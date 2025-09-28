@@ -35,16 +35,6 @@ class TwilioConnectionManager(BaseAudioConnectionManager):
         await self.cleanup_session(call_sid)
         self.logger.info(f"📞 Twilio call {call_sid} disconnected")
         
-    async def send_message(self, session_id: str, message: dict) -> None:
-        """Send message to Twilio call."""
-        if session_id in self.active_connections:
-            websocket = self.active_connections[session_id]['websocket']
-            try:
-                await websocket.send_text(json.dumps(message))
-            except Exception as e:
-                self.logger.error(f"Error sending message to Twilio call {session_id}: {e}")
-                await self.disconnect(session_id)
-    
     async def create_audio_handler(self, websocket: WebSocket, session_id: str) -> TwilioAudioHandler:
         """Create a Twilio audio handler for the session."""
         return TwilioAudioHandler(websocket, session_id, self)
